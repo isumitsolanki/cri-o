@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -397,6 +398,14 @@ func (c *ContainerServer) LoadSandbox(ctx context.Context, id string) (sb *sandb
 	scontainer.SetSpec(&m)
 	scontainer.SetMountPoint(m.Annotations[annotations.MountPoint])
 
+	// Restore ID mappings from the OCI spec if user namespace is in use
+	if m.Linux != nil && len(m.Linux.UIDMappings) > 0 && len(m.Linux.GIDMappings) > 0 {
+		if mappings := ConvertOCIToStorageIDMappings(m.Linux.UIDMappings, m.Linux.GIDMappings); mappings != nil {
+			scontainer.SetIDMappings(mappings)
+			log.Debugf(ctx, "Restored ID mappings for sandbox %s from OCI spec", id)
+		}
+	}
+
 	if err := restoreVolumes(&m, scontainer); err != nil {
 		return sb, fmt.Errorf("restore volumes: %w", err)
 	}
@@ -577,7 +586,12 @@ func (c *ContainerServer) LoadContainer(ctx context.Context, id string) (retErr 
 		return err
 	}
 
-	ctr, err := oci.NewContainer(id, name, containerPath, m.Annotations[annotations.LogPath], labels, m.Annotations, kubeAnnotations, userRequestedImage, someNameOfTheImage, imageID, "", &metadata, sb.ID(), tty, stdin, stdinOnce, sb.RuntimeHandler(), containerDir, created, stopSignal)
+	someRepoDigest := ""
+	if repoDigests := m.Annotations[annotations.ImageRepoDigests]; repoDigests != "" {
+		someRepoDigest = strings.SplitN(repoDigests, ",", 2)[0]
+	}
+
+	ctr, err := oci.NewContainer(id, name, containerPath, m.Annotations[annotations.LogPath], labels, m.Annotations, kubeAnnotations, userRequestedImage, someNameOfTheImage, imageID, someRepoDigest, &metadata, sb.ID(), tty, stdin, stdinOnce, sb.RuntimeHandler(), containerDir, created, stopSignal)
 	if err != nil {
 		return err
 	}

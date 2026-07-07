@@ -132,7 +132,7 @@ If true, the runtime will not use `pivot_root`, but instead use `MS_MOVE`.
 Path where the keys required for image decryption are located
 
 **additional_artifact_stores**=[]
-A list of additional read-only OCI artifact store paths (experimental, subject to change). CRI-O expects an "artifacts/" subdirectory within each configured path. All entries must be absolute paths. Artifacts in these stores take priority over the main store. Because these stores are read-only, CRI-O cannot remove artifacts from them. If a tag is re-pointed on the registry, the stale local copy in a read-only store will continue to be used; the artifact must be removed from the read-only store directly on the filesystem to pick up the new version.
+A list of additional read-only OCI artifact store paths. CRI-O expects an "artifacts/" subdirectory within each configured path. All entries must be absolute paths. Artifacts in these stores take priority over the main store. Because these stores are read-only, CRI-O cannot remove artifacts from them. If a tag is re-pointed on the registry, the stale local copy in a read-only store will continue to be used; the artifact must be removed from the read-only store directly on the filesystem to pick up the new version.
 
 **conmon**=""
 Path to the conmon binary, used for monitoring the OCI runtime. Will be searched for using $PATH if empty.
@@ -237,7 +237,7 @@ List of devices on the host that a user can specify with the "io.kubernetes.cri-
 **additional_devices**=[]
 List of additional devices. Specified as "<device-on-host>:<device-on-container>:<permissions>", for example: "--additional-devices=/dev/sdc:/dev/xvdc:rwm". If it is empty or commented out, only the devices defined in the container json file by the user/kube will be added.
 
-**hooks_dir**=["*path*", ...]
+**hooks_dir**=["_path_", ...]
 Each `*.json` file in the path configures a hook for CRI-O containers. For more details on the syntax of the JSON files and the semantics of hook injection, see `oci-hooks(5)`. CRI-O currently support both the 1.0.0 and 0.1.0 hook schemas, although the 0.1.0 schema is deprecated.
 
 Paths listed later in the array have higher precedence (`oci-hooks(5)` discusses directory precedence).
@@ -357,7 +357,11 @@ Path to the OCI compatible runtime used for this runtime handler.
 Root directory used to store runtime data
 
 **runtime_type**="oci"
-Type of the runtime used for this runtime handler. "oci", "vm"
+Type of the runtime used for this runtime handler. Valid values are:
+
+- `"oci"` (default): Standard OCI runtime (e.g. runc, crun). The `runtime_path` should point to the OCI runtime binary.
+- `"vm"`: VM-isolation shim using the containerd shimv2/ttrpc protocol. The `runtime_path` must be a `containerd-shim-*` binary. This runtime type is exercised in CI with [Kata Containers](https://github.com/kata-containers/kata-containers) (`containerd-shim-kata-v2`). Other shimv2 shims implement the same protocol and may work — for example [gVisor](https://github.com/google/gvisor)'s `containerd-shim-runsc-v1` — but are not currently covered by CI.
+- `"pod"`: Pod-level runtime using [conmon-rs](https://github.com/containers/conmon-rs) instead of conmon. conmon-rs operates at pod granularity.
 
 **inherit_default_runtime**=false
 Override the runtime path, runtime config path, runtime root and runtime type from the default runtime on load.
@@ -499,7 +503,7 @@ The path to a file like /var/lib/kubelet/config.json holding credentials specifi
 The command to run to have a container stay in the paused state. This option supports live configuration reload.
 
 **pinned_images**=[]
-A list of images to be excluded from the kubelet's garbage collection. It allows specifying image names using either exact, glob, or keyword patterns. Exact matches must match the entire name, glob matches can have a wildcard \* at the end, and keyword matches can have wildcards on both ends. By default, this list includes the `pause` image if configured by the user, which is used as a placeholder in Kubernetes pods.
+A list of images and OCI artifacts to be excluded from the kubelet's garbage collection. It allows specifying image names using either exact, glob, or keyword patterns. Exact matches must match the entire name, glob matches can have a wildcard \* at the end, and keyword matches can have wildcards on both ends. By default, this list includes the `pause` image if configured by the user, which is used as a placeholder in Kubernetes pods.
 
 **signature_policy**=""
 Path to the file which decides what sort of policy we use when deciding whether or not to trust an image that we've pulled. It is not recommended that this option be used, as the default behavior of using the system-wide default policy (i.e., /etc/containers/policy.json) is most often preferred. Please refer to containers-policy.json(5) for more details.
@@ -548,6 +552,9 @@ Path to the directory where CNI configuration files are located.
 
 **plugin_dirs**=["/opt/cni/bin/",]
 List of paths to directories where CNI plugin binaries are located.
+
+**cni_status_grace_period**="0s"
+Enable continuous CNI STATUS monitoring with the given grace period. When set to "0s" (default), monitoring is disabled and plugin health is only determined at startup; runtime failures will not be detected. When set to a positive duration (e.g. "1m"), a background goroutine polls the plugin every 5 seconds and waits for this grace period before marking the node not-ready, tolerating brief CNI disruptions during plugin upgrades (e.g. OVN-K daemonset rollout).
 
 ## CRIO.METRICS TABLE
 
